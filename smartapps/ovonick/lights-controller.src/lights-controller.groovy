@@ -56,6 +56,13 @@ def motionActiveHandler(event) {
     log.debug "${app.label}, motionActiveHandler"
 
     state.isMotionActive = true
+    if (illuminanceDevice) {
+        if (illuminanceDevice.currentValue("illuminance") <= illuminance) {
+            switchesOn()
+        }
+    } else {
+        switchesOn()
+    }
 }
 
 def motionInactiveHandler(event) {
@@ -66,8 +73,12 @@ def motionInactiveHandler(event) {
 }
 
 def switchOnHandler(event) {
-    log.debug "${app.label}, switchOnHandler"
+    log.debug "${app.label}, switchOnHandler, event: ${event.value}, event.physical: ${event.physical}"
 
+    if (!event.physical) {
+        return
+    }
+    
     switchesOn()
 
     // Motion sensors may not have picked up motion when switch was turned on.
