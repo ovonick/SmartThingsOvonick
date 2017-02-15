@@ -24,102 +24,95 @@ definition(
     iconX3Url: "https://s3.amazonaws.com/smartapp-icons/Convenience/Cat-Convenience@2x.png")
 
 preferences {
-	section("Select Devices and enter parameters") {
-		input "switches",          "capability.switch",                 title: "Switch Devices",      required: true,  multiple: true
-		input "motions",           "capability.motionSensor",           title: "Motion Sensors",      required: false, multiple: true
+    section("Select Devices and enter parameters") {
+        input "switches",          "capability.switch",                 title: "Switch Devices",      required: true,  multiple: true
+        input "motions",           "capability.motionSensor",           title: "Motion Sensors",      required: false, multiple: true
         input "illuminanceDevice", "capability.illuminanceMeasurement", title: "Illuminance Device",  required: false, multiple: false
-		input "minutes",           "number",                            title: "Minutes to turn off", required: true,                  defaultValue: 1
-		input "illuminance",       "number",                            title: "Illuminance",         required: false,                 defaultValue: 0, range: "0..100"
-	}
+        input "minutes",           "number",                            title: "Minutes to turn off", required: true,                  defaultValue: 1
+        input "illuminance",       "number",                            title: "Illuminance",         required: false,                 defaultValue: 0, range: "0..100"
+    }
 }
 
 def installed() {
-	log.debug "${app.label}, installed()"
-	initialize()
+    log.debug "${app.label}, installed()"
+    initialize()
 }
 
 def updated() {
-	log.debug "${app.label}, updated()"
-	unsubscribe()
-	initialize()
+    log.debug "${app.label}, updated()"
+    unsubscribe()
+    initialize()
 }
 
 def initialize() {
-	log.debug "${app.label}, initialize()"
+    log.debug "${app.label}, initialize()"
 
-	subscribe(motions,  "motion.active",   motionActiveHandler)
-	subscribe(motions,  "motion.inactive", motionInactiveHandler)
-	subscribe(switches, "switch.on",       switchOnHandler)
-	//subscribe(switches, "switch", switchAllHandler, [filterEvents: false])
+    subscribe(motions,  "motion.active",   motionActiveHandler)
+    subscribe(motions,  "motion.inactive", motionInactiveHandler)
+    subscribe(switches, "switch.on",       switchOnHandler)
 }
 
 def motionActiveHandler(event) {
-	log.debug "${app.label}, motionActiveHandler"
-    
+    log.debug "${app.label}, motionActiveHandler"
+
     state.isMotionActive = true
 }
 
 def motionInactiveHandler(event) {
-	log.debug "${app.label}, motionInactiveHandler"
-    
-    state.isMotionActive = false
-	requestToTurnOff()
-}
+    log.debug "${app.label}, motionInactiveHandler"
 
-/*
-def switchAllHandler(event) {
-	log.debug "${app.label}, switchAllHandler"
+    state.isMotionActive = false
+    requestToTurnOff()
 }
-*/
 
 def switchOnHandler(event) {
-	log.debug "${app.label}, switchOnHandler"
-    
+    log.debug "${app.label}, switchOnHandler"
+
     switchesOn()
-    
+
     // Motion sensors may not have picked up motion when switch was turned on.
     // If switch was turned on we also assume there was a motion (that is if there are motion sensors at all)
     if (motions) {
-    	state.isMotionActive = true
+        state.isMotionActive = true
     } else {
-    	state.isMotionActive = false
+        state.isMotionActive = false
     }
         
-	requestToTurnOff()
+    requestToTurnOff()
 }
 
 def requestToTurnOff() {
-	def delaySeconds = minutes * 60
+    def delaySeconds = minutes * 60
     //def delayMilliseconds = delaySeconds * 1000
-	//state.turnOffAt = now() + delayMilliseconds
-    
+    //state.turnOffAt = now() + delayMilliseconds
+
     //log.debug "${app.label}, requestToTurnOff() - delaySeconds: ${delaySeconds}, delayMilliseconds: ${delayMilliseconds}, now(): ${now()}, state.turnOffAt: ${state.turnOffAt}"
     log.debug "${app.label}, requestToTurnOff() - delaySeconds: ${delaySeconds}"
-    
+
     if (delaySeconds == 0) {
-    	switchesOff()
+        switchesOff()
     } else {
-    	runIn(delaySeconds, switchesOff)
+        runIn(delaySeconds, switchesOff)
     }
 }
 
 def switchesOff(event) {
-	switchesOff()
+    switchesOff()
 }
 
 def switchesOff() {
     //log.debug "${app.label}, switchesOff() - now(): ${now()}, state.turnOffAt: ${state.turnOffAt}"
     log.debug "${app.label}, switchesOff() state.isMotionActive: ${state.isMotionActive}"
 
-	if (state.isMotionActive) {
-    	return
+    if (state.isMotionActive) {
+        return
     }
-    
+
     switches.off()
 }
 
 def switchesOn() {
-	log.debug "${app.label}, switchesOn() state.isMotionActive: ${state.isMotionActive}"
+    log.debug "${app.label}, switchesOn() state.isMotionActive: ${state.isMotionActive}"
 
     switches.on()
 }
