@@ -56,6 +56,7 @@ def motionActiveHandler(event) {
     log.debug "${app.label}, motionActiveHandler"
 
     state.isMotionActive = true
+    
     if (illuminanceDevice) {
         if (illuminanceDevice.currentValue("illuminance") <= illuminance) {
             switchesOn()
@@ -79,8 +80,6 @@ def switchOnHandler(event) {
         return
     }
     
-    switchesOn()
-
     // Motion sensors may not have picked up motion when switch was turned on.
     // If switch was turned on we also assume there was a motion (that is if there are motion sensors at all)
     if (motions) {
@@ -94,10 +93,7 @@ def switchOnHandler(event) {
 
 def requestToTurnOff() {
     def delaySeconds = minutes * 60
-    //def delayMilliseconds = delaySeconds * 1000
-    //state.turnOffAt = now() + delayMilliseconds
 
-    //log.debug "${app.label}, requestToTurnOff() - delaySeconds: ${delaySeconds}, delayMilliseconds: ${delayMilliseconds}, now(): ${now()}, state.turnOffAt: ${state.turnOffAt}"
     log.debug "${app.label}, requestToTurnOff() - delaySeconds: ${delaySeconds}"
 
     if (delaySeconds == 0) {
@@ -112,7 +108,6 @@ def switchesOff(event) {
 }
 
 def switchesOff() {
-    //log.debug "${app.label}, switchesOff() - now(): ${now()}, state.turnOffAt: ${state.turnOffAt}"
     log.debug "${app.label}, switchesOff() state.isMotionActive: ${state.isMotionActive}"
 
     if (state.isMotionActive) {
