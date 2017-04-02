@@ -29,7 +29,7 @@ preferences {
         input "motions",           "capability.motionSensor",           title: "Motion Sensors",      required: false, multiple: true
         input "illuminanceDevice", "capability.illuminanceMeasurement", title: "Illuminance Device",  required: false, multiple: false
         input "minutes",           "number",                            title: "Minutes to turn off", required: true,                  defaultValue: 1
-        input "illuminance",       "number",                            title: "Illuminance",         required: false,                 defaultValue: 0, range: "0..100"
+        input "illuminance",       "number",                            title: "Illuminance",         required: false,                 defaultValue: 0, range: "0..10000"
     }
 }
 
@@ -58,7 +58,10 @@ def motionActiveHandler(event) {
     state.isMotionActive = true
     
     if (illuminanceDevice) {
-        if (illuminanceDevice.currentValue("illuminance") <= illuminance) {
+        def currentIlluminance = illuminanceDevice.currentValue("illuminance")
+        log.debug "${app.label}, current illuminance: ${currentIlluminance}"
+        
+        if (currentIlluminance <= illuminance) {
             switchesOn()
         }
     } else {
@@ -94,7 +97,7 @@ def switchOnHandler(event) {
 def requestToTurnOff() {
     def delaySeconds = minutes * 60
 
-    log.debug "${app.label}, requestToTurnOff() - delaySeconds: ${delaySeconds}"
+    log.debug "${app.label}, requestToTurnOff(), delaySeconds: ${delaySeconds}"
 
     if (delaySeconds == 0) {
         switchesOff()
@@ -108,7 +111,7 @@ def switchesOff(event) {
 }
 
 def switchesOff() {
-    log.debug "${app.label}, switchesOff() state.isMotionActive: ${state.isMotionActive}"
+    log.debug "${app.label}, switchesOff(), state.isMotionActive: ${state.isMotionActive}"
 
     if (state.isMotionActive) {
         return
@@ -118,7 +121,7 @@ def switchesOff() {
 }
 
 def switchesOn() {
-    log.debug "${app.label}, switchesOn() state.isMotionActive: ${state.isMotionActive}"
+    log.debug "${app.label}, switchesOn(), state.isMotionActive: ${state.isMotionActive}"
 
     switches.on()
 }
