@@ -37,9 +37,11 @@ preferences {
     }
     
     section("Parameters") {
-        input "sunriseSunsetOffset", "number", title: "Sunrise/Sunset Offset"
-        input "turnOffInterval",     "number", title: "Minutes to turn off", required: true, defaultValue: 10, range: "1..*"
-        input "dimmToLevel",         "number", title: "Level to this level before turning off"
+        input "isTimeRestricted",             "bool",    title: "Run only between Sunset and Sunrise?",         required: true, defaultValue: true
+        input "sunriseSunsetOffset",          "number",  title: "Sunrise/Sunset Offset"
+        input "turnOffIntervalPhysicalEvent", "number",  title: "Minutes to turn off after pressing on switch", required: true, defaultValue: 30, range: "1..*"
+        input "turnOffIntervalSensorEvent",   "number",  title: "Minutes to turn off after motion/door open",   required: true, defaultValue: 10, range: "1..*"
+        input "dimmToLevel",                  "number",  title: "Set dimmers to this level before turning off"
     }
 }
 
@@ -58,7 +60,6 @@ def updated() {
 
 def initialize() {
     subscribe(motionsInput,     "motion.active",   motionActiveHandler)
-    //subscribe(motionsInput,  "motion.inactive", motionInactiveHandler)
     subscribe(switchesInput,    "switch.on",       switchOnHandler)
     subscribe(switchesInput,    "switch.off",      switchOffHandler)
     subscribe(doorSensorsInput, "contact.open",    contactOpenHandler)
@@ -71,7 +72,7 @@ def switchOnHandler(event) {
         return
     }
     
-    scheduleTurnOff()
+    scheduleTurnOff(turnOffIntervalPhysicalEvent)
 }
 
 def switchOffHandler(event) {
@@ -110,7 +111,7 @@ def turnOn() {
     
     switchesControlled*.on()
     
-    scheduleTurnOff()
+    scheduleTurnOff(turnOffIntervalSensorEvent)
 }
 
 def getDevicesWithSwitchState(devices, stateValue) {
@@ -118,7 +119,9 @@ def getDevicesWithSwitchState(devices, stateValue) {
 }
 
 def isShouldTurnOn() {
-	return isBetweenSunsetAndSunrise() && now() > state.turnOnAfter
+	log.debug "isTimeRestricted: ${isTimeRestricted}"
+    
+	return (!isTimeRestricted || isBetweenSunsetAndSunrise()) && (now() > state.turnOnAfter)
 }
 
 def isBetweenSunsetAndSunrise() {
@@ -131,10 +134,10 @@ def isBetweenSunsetAndSunrise() {
     return isTimeOfDayIsBetweenSunsetAndSunrise
 }
 
-def scheduleTurnOff() {
+def scheduleTurnOff(turnOffInterval) {
     def delaySeconds = Math.max(60, turnOffInterval * 60)
 
-    log.debug "${app.label}, scheduleTurnOff(), delaySeconds: ${delaySeconds}"
+    log.debug "${app.label}, scheduleTurnOff(), turnOffInterval: ${turnOffInterval}, delaySeconds: ${delaySeconds}"
 
 	state.turnOffAfter = now() + (delaySeconds * 1000)
 
@@ -148,7 +151,7 @@ def switchesOffOrDimHandler(event) {
     
     if (dimmersThatAreOn) {
     	dimmersThatAreOn*.setLevel(dimmToLevel)
-        runIn(15, dimmersFullyOffHandler)
+        runIn(30, dimmersFullyOffHandler)
     }
     
     getDevicesWithSwitchState(switchesControlled, "on")*.off()
