@@ -147,6 +147,15 @@ def scheduleTurnOff(turnOffInterval) {
 }
 
 def switchesOffOrDimHandler(event) {
+	// Some motion sensors don't fire "motion.active" events for 4-5 minutes after first motion is sensed
+    // In this cases we need to check if motion sensors are still in "motion.active" mode then
+    // schedule this event one more time
+    if (motionsInput?.any {it.currentMotion == 'active'}) {
+        log.debug("Rescheduling turn off handler because there are motion sensors still in motion.active mode")
+        scheduleTurnOff(turnOffIntervalSensorEvent)
+        return
+    }
+
 	def dimmersThatAreOn = getDevicesWithSwitchState(dimmersControlled, "on")
     
     if (dimmersThatAreOn) {
