@@ -41,7 +41,7 @@ preferences {
         input "sunriseSunsetOffset",          "number",  title: "Sunrise/Sunset Offset"
         input "turnOffIntervalPhysicalEvent", "number",  title: "Minutes to turn off after pressing on switch", required: true, defaultValue: 30, range: "1..*"
         input "turnOffIntervalSensorEvent",   "number",  title: "Minutes to turn off after motion/door open",   required: true, defaultValue: 10, range: "1..*"
-        input "dimmToLevel",                  "number",  title: "Set dimmers to this level before turning off"
+        input "dimmToLevel",                  "number",  title: "Dimmers level 30 seconds before turning off"
     }
 }
 
@@ -82,7 +82,7 @@ def switchOffHandler(event) {
         return
     }
     
-    state.turnOnAfter = now() + 10 * 1000 // 10 seconds silent period where no event will turn switches on after physically turning off
+    atomicState.turnOnAfter = now() + 10 * 1000 // 10 seconds silent period where no event will turn switches on after physically turning off
 }
 
 def motionActiveHandler(event) {
@@ -121,7 +121,7 @@ def getDevicesWithSwitchState(devices, stateValue) {
 def isShouldTurnOn() {
 	log.debug "isTimeRestricted: ${isTimeRestricted}"
     
-	return (!isTimeRestricted || isBetweenSunsetAndSunrise()) && (now() > state.turnOnAfter)
+	return (!isTimeRestricted || isBetweenSunsetAndSunrise()) && (now() > atomicState.turnOnAfter)
 }
 
 def isBetweenSunsetAndSunrise() {
@@ -139,9 +139,11 @@ def scheduleTurnOff(turnOffInterval) {
 
     log.debug "${app.label}, scheduleTurnOff(), turnOffInterval: ${turnOffInterval}, delaySeconds: ${delaySeconds}"
 
-	state.turnOffAfter = now() + (delaySeconds * 1000)
+	def turnOffAfter = Math.max(atomicState.turnOffAfter, (now() + (delaySeconds * 1000)))
 
-    log.debug "state.turnOffAfter: ${state.turnOffAfter}"
+    atomicState.turnOffAfter = turnOffAfter
+
+    log.debug "atomicState.turnOffAfter: ${turnOffAfter}"
 
     runIn(delaySeconds, switchesOffOrDimHandler)
 }
@@ -167,9 +169,9 @@ def switchesOffOrDimHandler(event) {
 }
 
 def dimmersFullyOffHandler() {
-    log.debug "dimmersFullyOffHandler, state.turnOffAfter: ${state.turnOffAfter}, now(): ${now()}"
+    log.debug "dimmersFullyOffHandler, atomicState.turnOffAfter: ${atomicState.turnOffAfter}, now(): ${now()}"
 
-	if (now() < state.turnOffAfter)
+	if (now() < atomicState.turnOffAfter)
 	    return
 
 	dimmersControlled*.setLevel(100)	
