@@ -37,11 +37,12 @@ preferences {
     }
     
     section("Parameters") {
-        input "isTimeRestricted",             "bool",    title: "Run only between Sunset and Sunrise?",         required: true, defaultValue: true
+        input "isTimeRestricted",             "bool",    title: "React on motion/door open only between Sunset and Sunrise?", required: true, defaultValue: true
         input "sunriseSunsetOffset",          "number",  title: "Sunrise/Sunset Offset"
-        input "turnOffIntervalPhysicalEvent", "number",  title: "Minutes to turn off after pressing on switch", required: true, defaultValue: 30, range: "1..*"
-        input "turnOffIntervalSensorEvent",   "number",  title: "Minutes to turn off after motion/door open",   required: true, defaultValue: 10, range: "1..*"
+        input "turnOffIntervalPhysicalEvent", "number",  title: "Minutes to turn off after pressing on a switch",             required: true, defaultValue: 30, range: "1..*"
+        input "turnOffIntervalSensorEvent",   "number",  title: "Minutes to turn off after motion/door open",                 required: true, defaultValue: 10, range: "1..*"
         input "dimmToLevel",                  "number",  title: "Dimmers level 30 seconds before turning off"
+        input "isKeepOnWhileDoorIsOpen",      "bool",    title: "Keep on while door is open?",                                required: true, defaultValue: false
     }
 }
 
@@ -135,17 +136,21 @@ def isBetweenSunsetAndSunrise() {
 }
 
 def scheduleTurnOff(turnOffInterval) {
-    def delaySeconds = Math.max(60, turnOffInterval * 60)
+    def turnOffIntervalSeconds = turnOffInterval * 60
 
-    log.debug "${app.label}, scheduleTurnOff(), turnOffInterval: ${turnOffInterval}, delaySeconds: ${delaySeconds}"
+	def currentTurnOffAfter = atomicState.turnOffAfter;
+	def newTurnOffAfter = now() + (turnOffIntervalSeconds * 1000)
 
-	def turnOffAfter = Math.max(atomicState.turnOffAfter, (now() + (delaySeconds * 1000)))
+	log.debug "${app.label}, scheduleTurnOff(), turnOffIntervalSeconds: ${turnOffIntervalSeconds}, currentTurnOffAfter: ${currentTurnOffAfter}, newTurnOffAfter: ${newTurnOffAfter}, difference ${(currentTurnOffAfter - newTurnOffAfter) / 1000} "
 
-    atomicState.turnOffAfter = turnOffAfter
+	if (newTurnOffAfter > currentTurnOffAfter) {
+    	atomicState.turnOffAfter = newTurnOffAfter;
+        
+		def runInSeconds = Math.max(60, turnOffIntervalSeconds) + 10; // adding 10 seconds so that when switchesOffOrDimHandler runs now() would be past atomicState.turnOffAfter
 
-    log.debug "atomicState.turnOffAfter: ${turnOffAfter}"
-
-    runIn(delaySeconds, switchesOffOrDimHandler)
+		log.debug "${app.label}, scheduleTurnOff(), scheduling switchesOffOrDimHandler to runInSeconds: ${runInSeconds}"
+		runIn(runInSeconds, switchesOffOrDimHandler)
+    }
 }
 
 def switchesOffOrDimHandler(event) {
@@ -156,6 +161,21 @@ def switchesOffOrDimHandler(event) {
         log.debug("Rescheduling turn off handler because there are motion sensors still in motion.active mode")
         scheduleTurnOff(turnOffIntervalSensorEvent)
         return
+    }
+
+	if (isKeepOnWhileDoorIsOpen && (doorSensorsInput.any {it.currentContact == 'open'})) {
+        log.debug("Rescheduling turn off handler because there are contact sensors in contact.open mode")
+        scheduleTurnOff(turnOffIntervalSensorEvent)
+        return
+    }
+    
+	def currentTurnOffAfter = atomicState.turnOffAfter;
+    def now = now();
+    
+	if (now < currentTurnOffAfter) {
+        log.debug("Rescheduling turn off handler because currentTurnOffAfter ${currentTurnOffAfter} is in the future. now(): ${now}")
+        scheduleTurnOff(turnOffIntervalSensorEvent)
+        return;
     }
 
 	def dimmersThatAreOn = getDevicesWithSwitchState(dimmersControlled, "on")
@@ -169,9 +189,12 @@ def switchesOffOrDimHandler(event) {
 }
 
 def dimmersFullyOffHandler() {
-    log.debug "dimmersFullyOffHandler, atomicState.turnOffAfter: ${atomicState.turnOffAfter}, now(): ${now()}"
+	def currentTurnOffAfter = atomicState.turnOffAfter;
+    def now = now();
+    
+    log.debug "dimmersFullyOffHandler, currentTurnOffAfter: ${currentTurnOffAfter}, now(): ${now}"
 
-	if (now() < atomicState.turnOffAfter)
+	if (now < currentTurnOffAfter)
 	    return
 
 	dimmersControlled*.setLevel(100)	
