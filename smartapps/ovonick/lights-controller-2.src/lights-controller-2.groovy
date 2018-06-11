@@ -66,9 +66,13 @@ def initialize() {
     subscribe(doorSensorsInput, "contact.open",    contactOpenHandler)
 }
 
-def switchOnHandler(event) {
-    log.debug "${app.label}, switchOnHandler, event: ${event.value}, event.physical: ${event.physical}"
+def logEvent(event) {
+    log.debug "device: ${event.device.label}, event.displayName: ${event.displayName}, event: ${event.value}, event.physical: ${event.physical}, event.digital: ${event.digital}, event.source: ${event.source}, event.data: ${event.data}"
+}
 
+def switchOnHandler(event) {
+	logEvent(event)
+    
     if (!event.physical) {
         return
     }
@@ -77,26 +81,29 @@ def switchOnHandler(event) {
 }
 
 def switchOffHandler(event) {
-    log.debug "${app.label}, switchOffHandler, event: ${event.value}, event.physical: ${event.physical}"
+	logEvent(event)
 
     if (!event.physical) {
         return
     }
     
     atomicState.turnOnAfter = now() + 10 * 1000 // 10 seconds silent period where no event will turn switches on after physically turning off
+    atomicState.turnOffAfter = 0;
 }
 
 def motionActiveHandler(event) {
-    log.debug "${app.label}, motionActiveHandler, event.value: ${event.value}, event: ${event}"
+	logEvent(event)
     
     //dimmersControlled?.getSupportedAttributes().each {log.debug "${it.name}"}
+    //dimmersControlled?.getProperties().each {log.debug "${it}"}
+    //log.debug "name: ${dimmersControlled?.name}, id: ${dimmersControlled?.id}"
     //dimmersControlled?.each {log.debug "${it.switchState.value}"}
     
 	turnOn()
 }
 
 def contactOpenHandler(event) {
-    log.debug "${app.label}, contactOpenHandler, event.value: ${event.value}, event: ${event}"
+	logEvent(event)
     
     turnOn()
 }
@@ -106,17 +113,45 @@ def turnOn() {
     	 return
     }
 
-	// Turn on only those that are off
-    dimmersControlled*.setLevel(100)
+    restoreSavedDimmerLevels(dimmersControlled)
     dimmersControlled*.on()
-    
     switchesControlled*.on()
     
     scheduleTurnOff(turnOffIntervalSensorEvent)
+    
+    resetSavedDimmerLevels()
 }
 
 def getDevicesWithSwitchState(devices, stateValue) {
 	return devices?.findAll { it.switchState.value == stateValue }
+}
+
+def restoreSavedDimmerLevels(dimmers) {
+	def savedDimmerLevels = atomicState.savedDimmerLevels;
+
+    log.debug "restoring saved dimmer levels ${savedDimmerLevels}"
+
+    if (savedDimmerLevels) {
+    	dimmers.each {
+            def savedLevel = savedDimmerLevels[it.id]
+            log.debug "restoring saved dimmer level ${savedLevel} for dimmer id ${it.id}"
+            if (savedLevel) {
+	        	it.setLevel(savedLevel)
+            }
+        }
+    }
+}
+
+def saveDimmerLevels(dimmers) {
+	def savedDimmerLevels = dimmers.collectEntries {[it.id, it.currentLevel]}
+    
+    log.debug "saving dimmer levels ${savedDimmerLevels}"
+    
+    atomicState.savedDimmerLevels = savedDimmerLevels
+}
+
+def resetSavedDimmerLevels() {
+	atomicState.savedDimmerLevels = null;
 }
 
 def isShouldTurnOn() {
@@ -181,6 +216,7 @@ def switchesOffOrDimHandler(event) {
 	def dimmersThatAreOn = getDevicesWithSwitchState(dimmersControlled, "on")
     
     if (dimmersThatAreOn) {
+    	saveDimmerLevels(dimmersThatAreOn)
     	dimmersThatAreOn*.setLevel(dimmToLevel)
         runIn(30, dimmersFullyOffHandler)
     }
@@ -197,6 +233,10 @@ def dimmersFullyOffHandler() {
 	if (now < currentTurnOffAfter)
 	    return
 
-	dimmersControlled*.setLevel(100)	
-	dimmersControlled*.off()
+	def dimmersThatAreOn = getDevicesWithSwitchState(dimmersControlled, "on")
+
+	restoreSavedDimmerLevels(dimmersControlled) // not an omission. trying to restore all previously saved dimmers as some dimmers could have been turned off while dimmers were in "about to turm off" state
+	dimmersThatAreOn*.off()
+    
+    resetSavedDimmerLevels()
 }
