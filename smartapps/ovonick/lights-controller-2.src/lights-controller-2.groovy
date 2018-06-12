@@ -54,7 +54,7 @@ def installed() {
 }
 
 def updated() {
-	log.debug "Updated with settings: ${settings}"
+	log.debug "updated(); settings: ${settings}"
 
 	unsubscribe()
 	initialize()
@@ -68,7 +68,7 @@ def initialize() {
 }
 
 def logEvent(event) {
-    log.debug "logging event for device: ${event?.device?.label}, event: ${event}, event.value: ${event?.value}, event.physical: ${event?.physical}, event.digital: ${event?.digital}, event.source: ${event?.source}, event.data: ${event?.data}"
+    log.debug "logEvent(); device: ${event?.device?.label}, event: ${event}, event.value: ${event?.value}, event.physical: ${event?.physical}, event.digital: ${event?.digital}, event.source: ${event?.source}, event.data: ${event?.data}"
 }
 
 def switchOnHandler(event) {
@@ -100,8 +100,6 @@ def motionActiveHandler(event) {
     //log.debug "name: ${dimmersControlled?.name}, id: ${dimmersControlled?.id}"
     //dimmersControlled?.each {log.debug "${it.switchState.value}"}
     
-    log.debug "motionActiveAction: ${motionActiveAction}"
-    
     if ("Maintain lights on".equals(motionActiveAction)) {
     	maintainOn()
     } else {
@@ -130,11 +128,23 @@ def turnOn() {
 }
 
 def maintainOn() {
+	if (!isAnyLightOn()) {
+    	return
+    }
+    
     restoreSavedDimmerLevels()
     
     scheduleTurnOff(turnOffIntervalSensorEvent)
     
     resetSavedDimmerLevels()
+}
+
+def isAnyLightOn() {
+	def isAnyLightOn = getDevicesWithSwitchState(switchesControlled, "on") || getDevicesWithSwitchState(dimmersControlled, "on")
+    
+    log.debug "isAnyLightOn(); isAnyLightOn: ${isAnyLightOn}"
+    
+    return isAnyLightOn
 }
 
 def getDevicesWithSwitchState(devices, stateValue) {
@@ -144,12 +154,12 @@ def getDevicesWithSwitchState(devices, stateValue) {
 def restoreSavedDimmerLevels() {
 	def savedDimmerLevels = atomicState.savedDimmerLevels;
 
-    log.debug "restoring saved dimmer levels ${savedDimmerLevels}"
+    log.debug "restoreSavedDimmerLevels(); restoring saved dimmer levels: ${savedDimmerLevels}"
 
     if (savedDimmerLevels) {
     	dimmersControlled.each {
             def savedLevel = savedDimmerLevels[it.id]
-            log.debug "restoring saved dimmer level ${savedLevel} for dimmer id ${it.id}"
+            log.debug "restoreSavedDimmerLevels(); restoring saved dimmer level: ${savedLevel} for dimmer id ${it.id}"
             if (savedLevel) {
 	        	it.setLevel(savedLevel)
             }
@@ -160,7 +170,7 @@ def restoreSavedDimmerLevels() {
 def saveDimmerLevels(dimmers) {
 	def savedDimmerLevels = dimmers.collectEntries {[it.id, it.currentLevel]}
     
-    log.debug "saving dimmer levels ${savedDimmerLevels}"
+    log.debug "saveDimmerLevels(); saving dimmer levels: ${savedDimmerLevels}"
     
     atomicState.savedDimmerLevels = savedDimmerLevels
 }
@@ -170,7 +180,7 @@ def resetSavedDimmerLevels() {
 }
 
 def isShouldTurnOn() {
-	log.debug "isTimeRestricted: ${isTimeRestricted}"
+	log.debug "isShouldTurnOn(); isTimeRestricted: ${isTimeRestricted}"
     
 	return (!isTimeRestricted || isBetweenSunsetAndSunrise()) && (now() > atomicState.turnOnAfter)
 }
@@ -180,7 +190,7 @@ def isBetweenSunsetAndSunrise() {
 
 	def isTimeOfDayIsBetweenSunsetAndSunrise = timeOfDayIsBetween(sunriseAndSunsetWithOffset.sunset, sunriseAndSunsetWithOffset.sunrise, new Date(), location.timeZone)
     
-    log.debug "isTimeOfDayIsBetweenSunsetAndSunrise: ${isTimeOfDayIsBetweenSunsetAndSunrise}"
+    log.debug "isBetweenSunsetAndSunrise(); isTimeOfDayIsBetweenSunsetAndSunrise: ${isTimeOfDayIsBetweenSunsetAndSunrise}"
     
     return isTimeOfDayIsBetweenSunsetAndSunrise
 }
@@ -191,14 +201,14 @@ def scheduleTurnOff(turnOffInterval) {
 	def currentTurnOffAfter = atomicState.turnOffAfter?:0;
 	def newTurnOffAfter = now() + (turnOffIntervalSeconds * 1000)
 
-	log.debug "scheduleTurnOff(), turnOffIntervalSeconds: ${turnOffIntervalSeconds}, currentTurnOffAfter: ${currentTurnOffAfter}, newTurnOffAfter: ${newTurnOffAfter}, difference ${(currentTurnOffAfter - newTurnOffAfter) / 1000} "
+	log.debug "scheduleTurnOff(); turnOffIntervalSeconds: ${turnOffIntervalSeconds}, currentTurnOffAfter: ${currentTurnOffAfter}, newTurnOffAfter: ${newTurnOffAfter}, difference ${(currentTurnOffAfter - newTurnOffAfter) / 1000} "
 
 	if (newTurnOffAfter > currentTurnOffAfter) {
     	atomicState.turnOffAfter = newTurnOffAfter;
         
 		def runInSeconds = Math.max(60, turnOffIntervalSeconds) + 10; // adding 10 seconds so that when switchesOffOrDimHandler runs now() would be past atomicState.turnOffAfter
 
-		log.debug "scheduleTurnOff(), scheduling switchesOffOrDimHandler to runInSeconds: ${runInSeconds}"
+		log.debug "scheduleTurnOff(); scheduling switchesOffOrDimHandler to runInSeconds: ${runInSeconds}"
 		runIn(runInSeconds, switchesOffOrDimHandler)
     }
 }
@@ -208,13 +218,13 @@ def switchesOffOrDimHandler(event) {
     // In this cases we need to check if motion sensors are still in "motion.active" mode then
     // schedule this event one more time
     if (motionsInput?.any {it.currentMotion == 'active'}) {
-        log.debug("Rescheduling turn off handler because there are motion sensors still in motion.active mode")
+        log.debug "switchesOffOrDimHandler(); Rescheduling turn off handler because there are motion sensors still in motion.active mode"
         scheduleTurnOff(turnOffIntervalSensorEvent)
         return
     }
 
 	if (isKeepOnWhileDoorIsOpen && (doorSensorsInput.any {it.currentContact == 'open'})) {
-        log.debug("Rescheduling turn off handler because there are contact sensors in contact.open mode")
+        log.debug "switchesOffOrDimHandler(); Rescheduling turn off handler because there are contact sensors in contact.open mode"
         scheduleTurnOff(turnOffIntervalSensorEvent)
         return
     }
@@ -223,7 +233,7 @@ def switchesOffOrDimHandler(event) {
     def now = now();
     
 	if (now < currentTurnOffAfter) {
-        log.debug("Rescheduling turn off handler because currentTurnOffAfter ${currentTurnOffAfter} is in the future. now(): ${now}")
+        log.debug "switchesOffOrDimHandler(); Rescheduling turn off handler because currentTurnOffAfter: ${currentTurnOffAfter} is in the future. now: ${now}"
         scheduleTurnOff(turnOffIntervalSensorEvent)
         return;
     }
@@ -243,7 +253,7 @@ def dimmersFullyOffHandler() {
 	def currentTurnOffAfter = atomicState.turnOffAfter;
     def now = now();
     
-    log.debug "dimmersFullyOffHandler, currentTurnOffAfter: ${currentTurnOffAfter}, now(): ${now}"
+    log.debug "dimmersFullyOffHandler(); currentTurnOffAfter: ${currentTurnOffAfter}, now: ${now}"
 
 	if (now < currentTurnOffAfter)
 	    return
